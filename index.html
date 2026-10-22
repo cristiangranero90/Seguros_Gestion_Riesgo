@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seguros Riesgo - Sistema de Gestión</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon">S</span>
+        <div>
+          <h1>Seguros Riesgo</h1>
+          <p>Sistema de Gestión</p>
+        </div>
+      </div>
+      <nav class="menu">
+        <button class="menu-btn active" data-view="dashboard">
+          <span class="menu-icon">▦</span> INICIO / DASHBOARD
+        </button>
+        <button class="menu-btn" data-view="clientes">
+          <span class="menu-icon">☺</span> CLIENTES
+        </button>
+        <button class="menu-btn" data-view="polizas">
+          <span class="menu-icon">✎</span> PÓLIZAS
+        </button>
+        <button class="menu-btn" data-view="siniestros">
+          <span class="menu-icon">⚠</span> SINIESTROS
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="db-status" class="db-status">Conectando...</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- ============ DASHBOARD ============ -->
+      <section id="view-dashboard" class="view active">
+        <header class="view-header">
+          <div>
+            <h2>Dashboard</h2>
+            <p class="subtitle">Indicadores clave y gráficos en tiempo real desde <code>seguros.db</code></p>
+          </div>
+          <button class="btn btn-ghost" id="btn-refresh-dashboard">Actualizar</button>
+        </header>
+
+        <div class="kpi-grid">
+          <article class="kpi kpi-blue">
+            <p class="kpi-label">Cantidad de Clientes</p>
+            <p class="kpi-value" id="kpi-clientes">-</p>
+            <p class="kpi-hint">SELECT COUNT(id_cliente) FROM CLIENTE</p>
+          </article>
+          <article class="kpi kpi-green">
+            <p class="kpi-label">Pólizas Activas</p>
+            <p class="kpi-value" id="kpi-polizas-activas">-</p>
+            <p class="kpi-hint">WHERE estado = 'Activa'</p>
+          </article>
+          <article class="kpi kpi-orange">
+            <p class="kpi-label">Siniestros Abiertos</p>
+            <p class="kpi-value" id="kpi-siniestros-abiertos">-</p>
+            <p class="kpi-hint">WHERE estado = 'Abierto'</p>
+          </article>
+          <article class="kpi kpi-red">
+            <p class="kpi-label">Siniestros Cerrados</p>
+            <p class="kpi-value" id="kpi-siniestros-cerrados">-</p>
+            <p class="kpi-hint">WHERE estado = 'Cerrado'</p>
+          </article>
+        </div>
+
+        <div class="charts-grid">
+          <article class="card">
+            <h3>Pólizas por estado</h3>
+            <div class="chart-box"><canvas id="chart-polizas-estado"></canvas></div>
+          </article>
+          <article class="card">
+            <h3>Siniestros por tipo</h3>
+            <div class="chart-box"><canvas id="chart-siniestros-tipo"></canvas></div>
+          </article>
+          <article class="card card-wide">
+            <h3>Siniestros por mes (fecha de ocurrencia)</h3>
+            <div class="chart-box chart-box-tall"><canvas id="chart-siniestros-mes"></canvas></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============ CLIENTES ============ -->
+      <section id="view-clientes" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Clientes</h2>
+            <p class="subtitle">Alta, consulta, edición y baja de clientes</p>
+          </div>
+          <div class="header-actions">
+            <input type="search" id="cliente-search" class="input-search" placeholder="Buscar por nombre, apellido, DNI, email...">
+            <button class="btn btn-primary" id="btn-nuevo-cliente">+ Nuevo Cliente</button>
+          </div>
+        </header>
+
+        <article class="card">
+          <div class="table-wrap">
+            <table id="tabla-clientes">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nombre</th>
+                  <th>Apellido</th>
+                  <th>DNI</th>
+                  <th>Email</th>
+                  <th>Teléfono</th>
+                  <th class="col-actions">Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============ PÓLIZAS ============ -->
+      <section id="view-polizas" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Pólizas</h2>
+            <p class="subtitle">Listado de pólizas con el cliente asociado</p>
+          </div>
+          <div class="header-actions">
+            <select id="filtro-cliente-poliza" class="input-select">
+              <option value="">Todos los clientes</option>
+            </select>
+            <select id="filtro-estado-poliza" class="input-select">
+              <option value="">Todos los estados</option>
+            </select>
+            <button class="btn btn-primary" id="btn-nueva-poliza">+ Nueva Póliza</button>
+          </div>
+        </header>
+
+        <article class="card" id="cliente-seleccionado-card" hidden>
+          <h3>Cliente seleccionado</h3>
+          <div id="cliente-seleccionado-datos" class="cliente-detalle"></div>
+        </article>
+
+        <article class="card">
+          <div class="table-wrap">
+            <table id="tabla-polizas">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>N° Póliza</th>
+                  <th>Cliente</th>
+                  <th>DNI</th>
+                  <th>Inicio</th>
+                  <th>Vencimiento</th>
+                  <th>Estado</th>
+                  <th class="col-actions">Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============ SINIESTROS ============ -->
+      <section id="view-siniestros" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Siniestros</h2>
+            <p class="subtitle">Registro de siniestros ligados a una póliza existente</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="btn-nuevo-siniestro">+ Registrar Siniestro</button>
+          </div>
+        </header>
+
+        <article class="card">
+          <h3>Registrar siniestro sobre una póliza existente</h3>
+          <div class="form-grid">
+            <div class="field field-full">
+              <label for="siniestro-poliza">Póliza <span class="req">*</span></label>
+              <select id="siniestro-poliza" required></select>
+            </div>
+          </div>
+          <div id="siniestro-poliza-info" class="info-box" hidden></div>
+          <div class="form-grid" id="siniestro-form-fields" hidden>
+            <div class="field">
+              <label for="siniestro-fecha">Fecha de ocurrencia <span class="req">*</span></label>
+              <input type="date" id="siniestro-fecha" required>
+            </div>
+            <div class="field">
+              <label for="siniestro-tipo">Tipo <span class="req">*</span></label>
+              <select id="siniestro-tipo" required>
+                <option value="Médica">Médica</option>
+                <option value="Vehicular">Vehicular</option>
+                <option value="Incendio">Incendio</option>
+                <option value="Robo">Robo</option>
+                <option value="Otros">Otros</option>
+              </select>
+            </div>
+            <div class="field field-full">
+              <label for="siniestro-descripcion">Descripción</label>
+              <textarea id="siniestro-descripcion" rows="2" placeholder="Detalle del hecho..."></textarea>
+            </div>
+            <div class="field">
+              <label for="siniestro-estado">Estado <span class="req">*</span></label>
+              <select id="siniestro-estado" required>
+                <option value="Abierto">Abierto</option>
+                <option value="Cerrado">Cerrado</option>
+              </select>
+            </div>
+            <div class="field field-actions">
+              <button class="btn btn-primary" id="btn-guardar-siniestro">Guardar Siniestro</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Siniestros registrados</h3>
+          <div class="table-wrap">
+            <table id="tabla-siniestros">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Descripción</th>
+                  <th>Estado</th>
+                  <th>Póliza</th>
+                  <th>Cliente</th>
+                  <th class="col-actions">Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============ MODAL CLIENTE ============ -->
+  <div class="modal-overlay" id="modal-cliente" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-cliente-title">Nuevo Cliente</h3>
+        <button class="modal-close" data-close="modal-cliente">&times;</button>
+      </div>
+      <form id="form-cliente">
+        <input type="hidden" id="cliente-id">
+        <div class="form-grid">
+          <div class="field">
+            <label for="cliente-nombre">Nombre <span class="req">*</span></label>
+            <input type="text" id="cliente-nombre" required>
+          </div>
+          <div class="field">
+            <label for="cliente-apellido">Apellido <span class="req">*</span></label>
+            <input type="text" id="cliente-apellido" required>
+          </div>
+          <div class="field">
+            <label for="cliente-dni">DNI <span class="req">*</span></label>
+            <input type="text" id="cliente-dni" required>
+          </div>
+          <div class="field">
+            <label for="cliente-email">Email</label>
+            <input type="email" id="cliente-email">
+          </div>
+          <div class="field">
+            <label for="cliente-telefono">Teléfono</label>
+            <input type="text" id="cliente-telefono">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close="modal-cliente">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ MODAL PÓLIZA ============ -->
+  <div class="modal-overlay" id="modal-poliza" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-poliza-title">Nueva Póliza</h3>
+        <button class="modal-close" data-close="modal-poliza">&times;</button>
+      </div>
+      <form id="form-poliza">
+        <input type="hidden" id="poliza-id">
+        <div class="form-grid">
+          <div class="field">
+            <label for="poliza-numero">Número de póliza <span class="req">*</span></label>
+            <input type="text" id="poliza-numero" placeholder="POL-2024-001X" required>
+          </div>
+          <div class="field">
+            <label for="poliza-cliente">Cliente <span class="req">*</span></label>
+            <select id="poliza-cliente" required></select>
+          </div>
+          <div class="field">
+            <label for="poliza-inicio">Fecha de inicio <span class="req">*</span></label>
+            <input type="date" id="poliza-inicio" required>
+          </div>
+          <div class="field">
+            <label for="poliza-fin">Fecha de vencimiento <span class="req">*</span></label>
+            <input type="date" id="poliza-fin" required>
+          </div>
+          <div class="field">
+            <label for="poliza-estado">Estado <span class="req">*</span></label>
+            <select id="poliza-estado" required>
+              <option value="Activa">Activa</option>
+              <option value="Vencida">Vencida</option>
+              <option value="Cancelada">Cancelada</option>
+            </select>
+          </div>
+        </div>
+        <div id="poliza-cliente-preview" class="info-box" hidden></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close="modal-poliza">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ MODAL CONFIRMACIÓN ============ -->
+  <div class="modal-overlay" id="modal-confirm" hidden>
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Confirmar eliminación</h3>
+        <button class="modal-close" data-close="modal-confirm">&times;</button>
+      </div>
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-close="modal-confirm">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-delete">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
